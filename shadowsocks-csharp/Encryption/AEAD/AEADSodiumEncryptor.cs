@@ -134,5 +134,10 @@ namespace Shadowsocks.Encryption.AEAD
         public override void Dispose()
         {
         }
+
+        public override void GenerateIV(byte[] outbuf, out int outlength)
+        {
+            throw new NotImplementedException();
+        }
     }
 }

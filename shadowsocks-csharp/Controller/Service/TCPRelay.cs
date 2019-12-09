@@ -764,7 +764,7 @@ namespace Shadowsocks.Controller
                 strategy?.UpdateLatency(_server, latency);
                 _tcprelay.UpdateLatency(_server, latency);
 
-                StartPipe(session);
+                SendIv(session);
             }
             catch (ArgumentException)
             {
@@ -778,6 +778,26 @@ namespace Shadowsocks.Controller
                 }
                 Logging.LogUsefulException(e);
                 Close();
+            }
+        }
+
+        private void SendIv (AsyncSession session)
+        {
+            int bytesToSend;
+            _encryptor.GenerateIV(_connetionSendBuffer, out bytesToSend);
+            session.Remote.BeginSend(_connetionSendBuffer, 0, bytesToSend, SocketFlags.None,
+                SendIvCallback, session);
+        }
+
+        private void SendIvCallback(IAsyncResult ar)
+        {
+            var session = (AsyncSession<ServerTimer>)ar.AsyncState;
+
+            int bytesRead = session.Remote.EndReceive(ar);
+
+            if (bytesRead > 0)
+            {
+                StartPipe(session);
             }
         }
 

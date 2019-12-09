@@ -126,6 +126,18 @@ namespace Shadowsocks.Encryption.Stream
             outlength = size + cipherOffset;
         }
 
+        public override void GenerateIV(byte[] outbuf, out int outlength)
+        {
+            // Generate IV
+            byte[] ivBytes = new byte[ivLen];
+            randBytes(ivBytes, ivLen);
+            initCipher(ivBytes, true);
+
+            Array.Copy(ivBytes, 0, outbuf, 0, ivLen);
+            _encryptIVSent = true;
+            outlength = ivLen;
+        }
+
         public override void Decrypt(byte[] buf, int length, byte[] outbuf, out int outlength)
         {
             Debug.Assert(_decCircularBuffer != null, "_circularBuffer != null");
