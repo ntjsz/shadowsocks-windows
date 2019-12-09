@@ -109,7 +109,7 @@ namespace Shadowsocks.Model
                     index = 0,
                     isDefault = true,
                     localPort = 1080,
-                    autoCheckUpdate = true,
+                    autoCheckUpdate = false,
                     configs = new List<Server>()
                     {
                         GetDefaultServer()
