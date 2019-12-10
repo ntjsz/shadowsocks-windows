@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
+using System.Text;
 using System.Timers;
 using Shadowsocks.Controller.Strategy;
 using Shadowsocks.Encryption;
@@ -100,6 +101,7 @@ namespace Shadowsocks.Controller
         class AsyncSession
         {
             public IProxy Remote { get; }
+            public bool iv_confirm = false;
 
             public AsyncSession(IProxy remote)
             {
@@ -783,6 +785,10 @@ namespace Shadowsocks.Controller
 
         private void SendIv (AsyncSession session)
         {
+            _startReceivingTime = DateTime.Now;
+            session.Remote.BeginReceive(_remoteRecvBuffer, 0, RecvSize, SocketFlags.None,
+                PipeRemoteReceiveCallback, session);
+
             int bytesToSend;
             _encryptor.GenerateIV(_connetionSendBuffer, out bytesToSend);
             session.Remote.BeginSend(_connetionSendBuffer, 0, bytesToSend, SocketFlags.None,
@@ -792,10 +798,9 @@ namespace Shadowsocks.Controller
         private void SendIvCallback(IAsyncResult ar)
         {
             var session = (AsyncSession<ServerTimer>)ar.AsyncState;
+            var bytesSent = session.Remote.EndSend(ar);
 
-            int bytesRead = session.Remote.EndReceive(ar);
-
-            if (bytesRead > 0)
+            if (bytesSent > 0)
             {
                 StartPipe(session);
             }
@@ -818,10 +823,6 @@ namespace Shadowsocks.Controller
             if (_closed) return;
             try
             {
-                _startReceivingTime = DateTime.Now;
-                session.Remote.BeginReceive(_remoteRecvBuffer, 0, RecvSize, SocketFlags.None,
-                    PipeRemoteReceiveCallback, session);
-
                 TryReadAvailableData();
                 Logging.Debug($"_firstPacketLength = {_firstPacketLength}");
                 SendToServer(_firstPacketLength, session);
@@ -830,6 +831,40 @@ namespace Shadowsocks.Controller
             {
                 Logging.LogUsefulException(e);
                 Close();
+            }
+        }
+
+        byte[] iv_confirm_respond = Encoding.Default.GetBytes("ok");
+
+        private int IvConfirm(byte[] buf, int length)
+        {
+            int confirm_len = iv_confirm_respond.Length;
+            if (length < confirm_len)
+            {
+                Logging.Error("IvConfirm too short");
+                return length;
+            }
+
+            for(int i = 0; i < confirm_len; i++)
+            {
+                if(buf[i] != iv_confirm_respond[i])
+                {
+                    Logging.Error("IvConfirm wrong");
+                    return length;
+                }
+            }
+
+            if(length == confirm_len)
+            {
+                return 0;
+            }
+            else
+            {
+                int lenAfter = length - confirm_len;
+                byte[] tmp = new byte[buf.Length];
+                Array.Copy(buf, 0, tmp, 0, length);
+                Array.Copy(tmp, confirm_len, buf, 0, lenAfter);
+                return lenAfter;
             }
         }
 
@@ -848,6 +883,17 @@ namespace Shadowsocks.Controller
                     int bytesToSend = -1;
                     lock (_decryptionLock)
                     {
+                        if(session.iv_confirm == false)
+                        {
+                            bytesRead = IvConfirm(_remoteRecvBuffer, bytesRead);
+                            session.iv_confirm = true;
+                            if(bytesRead == 0)
+                            {
+                                session.Remote.BeginReceive(_remoteRecvBuffer, 0, RecvSize, SocketFlags.None,
+                                    PipeRemoteReceiveCallback, session);
+                                return;
+                            }
+                        }
                         try
                         {
                             _encryptor.Decrypt(_remoteRecvBuffer, bytesRead, _remoteSendBuffer, out bytesToSend);
