@@ -834,7 +834,7 @@ namespace Shadowsocks.Controller
             }
         }
 
-        byte[] iv_confirm_respond = Encoding.Default.GetBytes("ok");
+        byte[] iv_confirm_respond = Encoding.Default.GetBytes("yFN8BqMWiVoaVKjai8gM");
 
         private int IvConfirm(byte[] buf, int length)
         {
